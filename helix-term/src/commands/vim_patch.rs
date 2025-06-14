@@ -1,6 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::commands::*;
+use helix_core::graphemes::prev_grapheme_boundary;
+use helix_core::line_ending::rope_is_line_ending;
+use helix_core::{Range, RopeSlice};
 use helix_view::document::Mode;
 
 #[derive(Default)]
@@ -116,6 +119,8 @@ macro_rules! static_commands_with_default {
         vim_extend_visual_line_up, "Move up (vim)",
         vim_extend_visual_line_down, "Move down (vim)",
         vim_goto_line, "Go to line (vim)",
+        vim_move_paragraph_forward, "Move by paragraph forward (vim)",
+        vim_move_paragraph_backward, "Move by paragraph forward (vim)",
             $($name, $doc,)*
         }
     };
@@ -182,5 +187,123 @@ mod vim_commands {
     pub fn vim_exit_select_mode(cx: &mut Context) {
         exit_select_mode(cx);
         VIM_STATE.exit_visual_line();
+    }
+
+    pub fn vim_move_paragraph_forward(cx: &mut Context) {
+        goto_para_impl(cx, vim_utils::movement_paragraph_forward);
+        if cx.editor.mode != Mode::Select {
+            normal_mode(cx);
+        }
+    }
+
+    pub fn vim_move_paragraph_backward(cx: &mut Context) {
+        goto_para_impl(cx, vim_utils::movement_paragraph_backward);
+        if cx.editor.mode != Mode::Select {
+            normal_mode(cx);
+        }
+    }
+}
+
+mod vim_utils {
+    use super::*;
+
+    pub fn movement_paragraph_backward(
+        slice: RopeSlice,
+        range: Range,
+        count: usize,
+        behavior: Movement,
+    ) -> Range {
+        //Mostly copy/past from Movements::move_prev_paragraph
+        let mut line = range.cursor_line(slice);
+        let first_char = slice.line_to_char(line) == range.cursor(slice);
+        let prev_line_empty = rope_is_line_ending(slice.line(line.saturating_sub(1)));
+        let curr_line_empty = rope_is_line_ending(slice.line(line));
+        let prev_empty_to_line = prev_line_empty && !curr_line_empty;
+
+        // skip character before paragraph boundary
+        if prev_empty_to_line && !first_char {
+            line += 1;
+        }
+        let mut lines = slice.lines_at(line);
+        lines.reverse();
+        let mut lines = lines.map(rope_is_line_ending).peekable();
+        let mut last_line = line;
+        for _ in 0..count {
+            while lines.next_if(|&e| e).is_some() {
+                line -= 1;
+            }
+            while lines.next_if(|&e| !e).is_some() {
+                line -= 1;
+            }
+            if lines.next_if(|&e| e).is_some() {
+                line -= 1;
+            }
+            if line == last_line {
+                break;
+            }
+            last_line = line;
+        }
+
+        let head = slice.line_to_char(line);
+        let anchor = if behavior == Movement::Move {
+            // exclude first character after paragraph boundary
+            if prev_empty_to_line && first_char {
+                range.cursor(slice)
+            } else {
+                range.head
+            }
+        } else {
+            range.put_cursor(slice, head, true).anchor
+        };
+        Range::new(anchor, head)
+    }
+
+    pub fn movement_paragraph_forward(
+        slice: RopeSlice,
+        range: Range,
+        count: usize,
+        behavior: Movement,
+    ) -> Range {
+        //Mostly copy/paste from Movements::move_next_paragraph
+        let mut line = range.cursor_line(slice);
+        let last_char =
+            prev_grapheme_boundary(slice, slice.line_to_char(line + 1)) == range.cursor(slice);
+        let curr_line_empty = rope_is_line_ending(slice.line(line));
+        let next_line_empty =
+            rope_is_line_ending(slice.line(slice.len_lines().saturating_sub(1).min(line + 1)));
+        let curr_empty_to_line = curr_line_empty && !next_line_empty;
+
+        // skip character after paragraph boundary
+        if curr_empty_to_line && last_char {
+            line += 1;
+        }
+        let mut lines = slice.lines_at(line).map(rope_is_line_ending).peekable();
+        let mut last_line = line;
+        for _ in 0..count {
+            while lines.next_if(|&e| e).is_some() {
+                line += 1;
+            }
+            while lines.next_if(|&e| !e).is_some() {
+                line += 1;
+            }
+            if lines.next_if(|&e| e).is_some() {
+                line += 1;
+            }
+            if line == last_line {
+                break;
+            }
+            last_line = line;
+        }
+        let head = slice.line_to_char(line);
+        let anchor = if behavior == Movement::Move {
+            if curr_empty_to_line && last_char {
+                range.head
+            } else {
+                range.cursor(slice)
+            }
+        } else {
+            range.put_cursor(slice, head, true).anchor
+        };
+        Range::new(anchor, head)
     }
 }

@@ -15,6 +15,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "$" => goto_line_end,
         "^" => goto_first_nonwhitespace,
 
+        "}" => vim_move_paragraph_forward,
+        "{" => vim_move_paragraph_backward,
+
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
