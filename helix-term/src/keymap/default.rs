@@ -347,6 +347,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "k" | "up" => vim_extend_visual_line_up,
         "l" | "right" => extend_char_right,
 
+        "a" => select_textobject_around,
+        "i" => select_textobject_inner,
+
         "w" => vim_extend_next_word_start,
         "b" => extend_prev_word_start,
         "e" => extend_next_word_end,
