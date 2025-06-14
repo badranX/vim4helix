@@ -115,6 +115,7 @@ macro_rules! static_commands_with_default {
         vim_extend_next_long_word_start, "Extend to start of next long word (vim)",
         vim_extend_visual_line_up, "Move up (vim)",
         vim_extend_visual_line_down, "Move down (vim)",
+        vim_goto_line, "Go to line (vim)",
             $($name, $doc,)*
         }
     };
@@ -148,6 +149,14 @@ mod vim_commands {
         ],
         after = extend_char_right
     );
+
+    pub fn vim_goto_line(cx: &mut Context) {
+        if cx.count.is_none() {
+            goto_last_line(cx);
+        } else {
+            goto_line(cx);
+        }
+    }
 
     pub fn vim_extend_visual_line_down(cx: &mut Context) {
         if VIM_STATE.is_visual_line() {

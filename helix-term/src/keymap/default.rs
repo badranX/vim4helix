@@ -40,7 +40,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "v" => select_mode,
         "V" => vim_visual_lines,
-        "G" => goto_line,
+        "G" => vim_goto_line,
         "g" => { "Goto"
             "g" => goto_file_start,
             "|" => goto_column,
