@@ -11,6 +11,10 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "k" | "up" => move_visual_line_up,
         "l" | "right" => move_char_right,
 
+        "0" => goto_line_start,
+        "$" => goto_line_end,
+        "^" => goto_first_nonwhitespace,
+
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
@@ -334,7 +338,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-|" => shell_pipe_to,
         "!" => shell_insert_output,
         "A-!" => shell_append_output,
-        "$" => shell_keep_pipe,
+        // "$" => shell_keep_pipe,
         "C-z" => suspend,
 
         "C-a" => increment,
