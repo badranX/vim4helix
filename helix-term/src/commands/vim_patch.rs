@@ -145,6 +145,7 @@ macro_rules! static_commands_with_default {
         vim_change, "Change operator (vim)",
         vim_yank, "Change operator (vim)",
         vim_yank_to_clipboard, "Change operator (vim)",
+        vim_delete_till_line_end, "Delete till line end (vim)",
             $($name, $doc,)*
         }
     };
@@ -251,6 +252,24 @@ mod vim_commands {
 
     pub fn vim_change(cx: &mut Context) {
         VimModifier::operator_impl(cx, VimModifier::Change, cx.register);
+    }
+
+    pub fn vim_delete_till_line_end(cx: &mut Context) {
+        match cx.editor.mode {
+            Mode::Normal => {
+                extend_to_line_end(cx);
+                VimModifier::run_operator_for_current_selection(
+                    cx,
+                    VimModifier::Delete,
+                    cx.register,
+                );
+                normal_mode(cx);
+            }
+            Mode::Select => {
+                VimModifier::run_operator_lines(cx, VimModifier::Delete, cx.register, 1);
+            }
+            _ => (),
+        }
     }
 }
 
