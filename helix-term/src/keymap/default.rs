@@ -28,6 +28,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "x" => vim_delete_any_selection,
 
+        "%" => match_brackets,
+
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
@@ -113,7 +115,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-b" => move_parent_node_start,
         "A-a" => select_all_siblings,
 
-        "%" => select_all,
+        // "%" => select_all,
         // "x" => extend_line_below,
         "X" => extend_to_line_bounds,
         "A-x" => shrink_to_line_bounds,
