@@ -38,31 +38,39 @@ impl AtomicState {
         self.highlight.store(true, Ordering::Relaxed);
     }
 
-    pub fn stop_highlight(&self) {
+    pub fn reset_highlight(&self) {
         self.highlight.store(false, Ordering::Relaxed);
     }
 
-    pub fn is_highlight(&self) -> bool {
+    pub fn is_highlight_allowed(&self) -> bool {
         self.highlight.load(Ordering::Relaxed)
     }
 }
 
-pub struct VimOps;
+pub mod vim_helix_patch {
+    use super::*;
 
-impl VimOps {
-    pub fn hook_after_each_command(cx: &mut Context) {
-        if cx.editor.mode != Mode::Select {
-            if !VIM_STATE.is_highlight() {
-                collapse_selection(cx);
-            } else {
-                VIM_STATE.stop_highlight();
+    pub fn hook_after_each_command(cx: &mut Context, cmd: &MappableCommand) {
+        match cx.editor.mode {
+            Mode::Select => {
+                // check if visual lines
+                if VIM_STATE.is_visual_line() {
+                    extend_to_line_bounds(cx);
+                }
             }
-        } else {
-            // check if visual lines
-            if VIM_STATE.is_visual_line() {
-                extend_to_line_bounds(cx);
+            Mode::Normal => {
+                if VIM_STATE.is_highlight_allowed() {
+                    VIM_STATE.reset_highlight();
+                } else {
+                    // TODO: optimize by avoiding string comparison
+                    match cmd.name() {
+                        "select_all" | "search_next" | "search_prev" => (),
+                        _ => collapse_selection(cx),
+                    };
+                }
             }
-        }
+            _ => (),
+        };
     }
 }
 
