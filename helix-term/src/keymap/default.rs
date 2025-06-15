@@ -21,6 +21,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "}" => vim_move_paragraph_forward,
         "{" => vim_move_paragraph_backward,
 
+        "C-6" => goto_last_accessed_file,
+        "C-^" => goto_last_accessed_file,
+
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
