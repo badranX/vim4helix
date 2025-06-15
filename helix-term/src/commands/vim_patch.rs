@@ -1,15 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 
 use crate::commands::*;
 use helix_core::graphemes::prev_grapheme_boundary;
 use helix_core::line_ending::rope_is_line_ending;
 use helix_core::{textobject, Range, RopeSlice, Selection, Transaction};
-use helix_view::document::Mode;
+use helix_view::{document::Mode, DocumentId};
 
 #[derive(Default)]
 pub struct AtomicState {
     visual_lines: AtomicBool,
     highlight: AtomicBool,
+    gv_selection: Mutex<Option<(Selection, DocumentId)>>,
 }
 
 pub static VIM_STATE: AtomicState = AtomicState::new();
@@ -19,7 +23,25 @@ impl AtomicState {
         Self {
             visual_lines: AtomicBool::new(false),
             highlight: AtomicBool::new(false),
+            gv_selection: Mutex::new(None),
         }
+    }
+
+    fn save_current_selection(&self, cx: &mut Context) {
+        let (view, doc) = current!(cx.editor);
+        let selection = doc.selection(view.id);
+
+        self.set_gv_selection(selection.clone(), doc.id());
+    }
+
+    pub fn set_gv_selection(&self, sel: Selection, id: DocumentId) {
+        let mut lock = self.gv_selection.lock().unwrap();
+        *lock = Some((sel, id));
+    }
+
+    pub fn get_gv_selection(&self) -> Option<(Selection, DocumentId)> {
+        let lock = self.gv_selection.lock().unwrap();
+        lock.clone()
     }
 
     pub fn visual_line(&self) {
@@ -155,6 +177,7 @@ macro_rules! static_commands_with_default {
         vim_yank_to_clipboard, "Change operator (vim)",
         vim_delete_till_line_end, "Delete till line end (vim)",
         vim_delete_any_selection, "Delete any Helix selection, `x` (vim)",
+        vim_restore_last_selection, "Restore last visual-mode selection (vim)",
             $($name, $doc,)*
         }
     };
@@ -214,11 +237,17 @@ mod vim_commands {
     }
 
     pub fn vim_normal_mode(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            VIM_STATE.save_current_selection(cx);
+        }
         normal_mode(cx);
         VIM_STATE.exit_visual_line();
     }
 
     pub fn vim_exit_select_mode(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            VIM_STATE.save_current_selection(cx);
+        }
         exit_select_mode(cx);
         VIM_STATE.exit_visual_line();
     }
@@ -284,6 +313,21 @@ mod vim_commands {
     pub fn vim_delete_any_selection(cx: &mut Context) {
         VimModifier::run_operator_for_current_selection(cx, VimModifier::Delete, cx.register);
         normal_mode(cx);
+    }
+
+    pub fn vim_restore_last_selection(cx: &mut Context) {
+        if let Some((gv_selection, id)) = VIM_STATE.get_gv_selection() {
+            let (view_id, doc_id) = {
+                let (view, doc) = current!(cx.editor);
+                (view.id, doc.id())
+            };
+
+            if doc_id == id {
+                select_mode(cx);
+                let (_, doc) = current!(cx.editor);
+                doc.set_selection(view_id, gv_selection);
+            }
+        }
     }
 }
 

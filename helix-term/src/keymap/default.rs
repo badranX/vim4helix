@@ -80,6 +80,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "j" => move_line_down,
             "." => goto_last_modification,
             "w" => goto_word,
+            "v" => vim_restore_last_selection,
         },
         ":" => command_mode,
 
@@ -204,7 +205,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "A-:" => ensure_selections_forward,
 
-        "esc" => normal_mode,
+        "esc" => vim_normal_mode,
         "C-b" | "pageup" => page_up,
         "C-f" | "pagedown" => page_down,
         "C-u" => page_cursor_half_up,
