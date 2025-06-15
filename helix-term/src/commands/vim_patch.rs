@@ -146,6 +146,7 @@ macro_rules! static_commands_with_default {
         vim_yank, "Change operator (vim)",
         vim_yank_to_clipboard, "Change operator (vim)",
         vim_delete_till_line_end, "Delete till line end (vim)",
+        vim_delete_any_selection, "Delete any Helix selection, `x` (vim)",
             $($name, $doc,)*
         }
     };
@@ -270,6 +271,11 @@ mod vim_commands {
             }
             _ => (),
         }
+    }
+
+    pub fn vim_delete_any_selection(cx: &mut Context) {
+        VimModifier::run_operator_for_current_selection(cx, VimModifier::Delete, cx.register);
+        normal_mode(cx);
     }
 }
 

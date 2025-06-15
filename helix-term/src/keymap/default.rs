@@ -26,6 +26,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-6" => goto_last_accessed_file,
         "C-^" => goto_last_accessed_file,
 
+        "x" => vim_delete_any_selection,
+
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
@@ -112,7 +114,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-a" => select_all_siblings,
 
         "%" => select_all,
-        "x" => extend_line_below,
+        // "x" => extend_line_below,
         "X" => extend_to_line_bounds,
         "A-x" => shrink_to_line_bounds,
 
