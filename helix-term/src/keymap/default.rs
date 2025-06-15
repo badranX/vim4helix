@@ -81,9 +81,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "o" => open_below,
         "O" => open_above,
 
-        "d" => delete_selection,
+        "d" => vim_delete,
         "A-d" => delete_selection_noyank,
-        "c" => change_selection,
+        "c" => vim_change,
         "A-c" => change_selection_noyank,
 
         "C" => copy_selection_on_next_line,
@@ -162,7 +162,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-u" => earlier,
         "A-U" => later,
 
-        "y" => yank,
+        "y" => vim_yank,
         // yank_all
         "p" => paste_after,
         // paste_all
@@ -290,7 +290,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                     "C-v" | "v" => vsplit_new,
                 },
             },
-            "y" => yank_to_clipboard,
+            "y" => vim_yank_to_clipboard,
             "Y" => yank_main_selection_to_clipboard,
             "p" => paste_clipboard_after,
             "P" => paste_clipboard_before,

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::commands::*;
 use helix_core::graphemes::prev_grapheme_boundary;
 use helix_core::line_ending::rope_is_line_ending;
-use helix_core::{Range, RopeSlice};
+use helix_core::{textobject, Range, RopeSlice, Selection, Transaction};
 use helix_view::document::Mode;
 
 #[derive(Default)]
@@ -141,6 +141,10 @@ macro_rules! static_commands_with_default {
         vim_move_paragraph_backward, "Move by paragraph forward (vim)",
         vim_cursor_forward_search, "Forward search for word near cursor (vim)",
         vim_cursor_backward_search, "Backward search for word near cursor (vim)",
+        vim_delete, "Delete operator (vim)",
+        vim_change, "Change operator (vim)",
+        vim_yank, "Change operator (vim)",
+        vim_yank_to_clipboard, "Change operator (vim)",
             $($name, $doc,)*
         }
     };
@@ -231,6 +235,22 @@ mod vim_commands {
     pub fn vim_cursor_backward_search(cx: &mut Context) {
         VIM_STATE.allow_highlight();
         vim_utils::cursor_search_impl(cx, Direction::Backward);
+    }
+
+    pub fn vim_delete(cx: &mut Context) {
+        VimModifier::operator_impl(cx, VimModifier::Delete, cx.register);
+    }
+
+    pub fn vim_yank(cx: &mut Context) {
+        VimModifier::operator_impl(cx, VimModifier::Yank, cx.register);
+    }
+
+    pub fn vim_yank_to_clipboard(cx: &mut Context) {
+        VimModifier::operator_impl(cx, VimModifier::Yank, Some('+'));
+    }
+
+    pub fn vim_change(cx: &mut Context) {
+        VimModifier::operator_impl(cx, VimModifier::Change, cx.register);
     }
 }
 
@@ -411,5 +431,357 @@ mod vim_utils {
             }
         }
         search_next_or_prev_impl(cx, Movement::Move, direction);
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VimModifier {
+    Yank,
+    Delete,
+    Change,
+}
+
+impl VimModifier {
+    fn get_full_line_selection(
+        cx: &mut Context,
+        count: usize,
+        include_last_newline: bool,
+    ) -> Selection {
+        let (view, doc) = current!(cx.editor);
+
+        return doc.selection(view.id).clone().transform(|range| {
+            let text = doc.text().slice(..);
+
+            let (start_line, end_line) = range.line_range(text);
+            let start = text.line_to_char(start_line);
+
+            let end = if include_last_newline {
+                text.line_to_char((end_line + count).min(text.len_lines()))
+            } else {
+                line_end_char_index(&text, end_line + count - 1)
+            };
+
+            Range::new(start, end).with_direction(range.direction())
+        });
+    }
+
+    fn yank_selection(editor: &mut Editor, selection: &Selection, register: Option<char>) {
+        // Adapted from commands::yank_impl
+
+        let register = register.unwrap_or(editor.config().default_yank_register);
+
+        let (_, doc) = current!(editor);
+        let text = doc.text().slice(..);
+
+        let values: Vec<String> = selection.fragments(text).map(Cow::into_owned).collect();
+        let selections = values.len();
+
+        match editor.registers.write(register, values) {
+            Ok(_) => editor.set_status(format!(
+                "yanked {selections} selection{} to register {register}",
+                if selections == 1 { "" } else { "s" }
+            )),
+            Err(err) => editor.set_error(err.to_string()),
+        }
+    }
+
+    fn delete_selection_without_yank(cx: &mut Context, selection: &Selection) {
+        let (view, doc) = current!(cx.editor);
+        let transaction = Transaction::change_by_selection(doc.text(), selection, |range| {
+            (range.from(), range.to(), None)
+        });
+
+        doc.apply(&transaction, view.id);
+    }
+
+    fn run_ops_after_command(
+        cx: &mut Context,
+        fun: fn(cx: &mut Context),
+        op: Self,
+        register: Option<char>,
+        count: usize,
+        require_visual: bool,
+    ) {
+        if require_visual {
+            select_mode(cx);
+        }
+
+        cx.count = std::num::NonZeroUsize::new(count);
+
+        fun(cx);
+        Self::run_operator_for_current_selection(cx, op, register);
+
+        if require_visual {
+            normal_mode(cx);
+        }
+    }
+
+    fn run_operator(
+        cx: &mut Context,
+        op: Self,
+        register: Option<char>,
+        selection_to_yank: &Selection,
+        selection_to_delete: &Selection,
+    ) {
+        Self::yank_selection(cx.editor, selection_to_yank, register);
+
+        match op {
+            Self::Delete | Self::Change => {
+                Self::delete_selection_without_yank(cx, selection_to_delete);
+            }
+            _ => return,
+        }
+
+        if op == Self::Change {
+            insert_mode(cx);
+        }
+    }
+
+    fn run_operator_for_current_selection(cx: &mut Context, op: Self, register: Option<char>) {
+        let (view, doc) = current!(cx.editor);
+        let selection = doc.selection(view.id).clone();
+
+        flip_selections(cx);
+        collapse_selection(cx);
+        Self::run_operator(cx, op, register, &selection, &selection);
+    }
+
+    fn run_operator_lines(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+        let selection = Self::get_full_line_selection(cx, count, true);
+        if op != Self::Change {
+            Self::run_operator(cx, op, register, &selection, &selection);
+        } else {
+            let delete_selection = Self::get_full_line_selection(cx, count, false);
+            Self::run_operator(cx, op, register, &selection, &delete_selection);
+        }
+    }
+
+    fn char_to_instant_command(ch: char) -> Option<fn(&mut Context)> {
+        match ch {
+            'w' => Some(extend_next_word_start),
+            'W' => Some(extend_next_long_word_start),
+            'b' => Some(extend_prev_word_start),
+            'B' => Some(extend_prev_long_word_start),
+            'e' => Some(extend_next_word_end),
+            'E' => Some(extend_next_long_word_end),
+            '0' => Some(goto_line_start),
+            '$' => Some(goto_line_end),
+            '^' => Some(goto_first_nonwhitespace),
+            _ => None,
+        }
+    }
+
+    fn op_till_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+        Self::run_op_find_char(cx, Direction::Forward, false, true, count, register, op);
+    }
+
+    fn op_next_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+        Self::run_op_find_char(cx, Direction::Forward, true, true, count, register, op);
+    }
+
+    fn op_till_prev_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+        Self::run_op_find_char(cx, Direction::Backward, false, true, count, register, op);
+    }
+
+    fn op_prev_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+        Self::run_op_find_char(cx, Direction::Backward, true, true, count, register, op);
+    }
+
+    pub fn operator_impl(cx: &mut Context, op: Self, register: Option<char>) {
+        if cx.editor.mode == Mode::Select {
+            Self::run_operator_for_current_selection(cx, op, register);
+            exit_select_mode(cx);
+            return;
+        }
+
+        let default_count = cx.count();
+
+        cx.on_next_key(move |cx, event| {
+            cx.editor.autoinfo = None;
+            if let Some(ch) = event.char() {
+                match ch {
+                    'd' | 'y' | 'c' => Self::run_operator_lines(cx, op, register, default_count),
+                    'i' => Self::modify_textobject(cx, textobject::TextObject::Inside, op),
+                    'a' => Self::modify_textobject(cx, textobject::TextObject::Around, op),
+                    't' => Self::op_till_char(cx, op, register, default_count),
+                    'f' => Self::op_next_char(cx, op, register, default_count),
+                    'T' => Self::op_till_prev_char(cx, op, register, default_count),
+                    'F' => Self::op_prev_char(cx, op, register, default_count),
+                    _ => (),
+                }
+
+                if let Some(cmd_ch) = Self::char_to_instant_command(ch) {
+                    Self::run_ops_after_command(cx, cmd_ch, op, register, default_count, true);
+                }
+            }
+        });
+
+        let repeated_key = match op {
+            Self::Delete => ("d", "Apply to lines"),
+            Self::Yank => ("y", "Apply to lines"),
+            Self::Change => ("c", "Apply to lines"),
+        };
+        let help_text = [
+            ("i", "Apply inside"),
+            ("a", "Apply around"),
+            repeated_key,
+            ("w, W, B, $, 0 ...", "Apply within line"),
+        ];
+
+        cx.editor.autoinfo = Some(Info::new("Apply Modifier", &help_text));
+    }
+
+    fn run_op_find_char(
+        cx: &mut Context,
+        direction: Direction,
+        inclusive: bool,
+        extend: bool,
+        count: usize,
+        register: Option<char>,
+        op: Self,
+    ) {
+        // Almost Copy/Paste from commands::find_char
+
+        // TODO: count is reset to 1 before next key so we move it into the closure here.
+        // Would be nice to carry over.
+
+        // need to wait for next key
+        // TODO: should this be done by grapheme rather than char?  For example,
+        // we can't properly handle the line-ending CRLF case here in terms of char.
+        cx.on_next_key(move |cx, event| {
+            let ch = match event {
+                KeyEvent {
+                    code: KeyCode::Enter,
+                    ..
+                } => {
+                    find_char_line_ending(cx, count, direction, inclusive, extend);
+                    return;
+                }
+
+                KeyEvent {
+                    code: KeyCode::Tab, ..
+                } => '\t',
+
+                KeyEvent {
+                    code: KeyCode::Char(ch),
+                    ..
+                } => ch,
+                _ => return,
+            };
+            let motion = move |editor: &mut Editor| {
+                match direction {
+                    Direction::Forward => {
+                        find_char_impl(editor, &find_next_char_impl, inclusive, extend, ch, count)
+                    }
+                    Direction::Backward => {
+                        find_char_impl(editor, &find_prev_char_impl, inclusive, extend, ch, count)
+                    }
+                };
+            };
+
+            cx.editor.apply_motion(motion);
+            Self::run_operator_for_current_selection(cx, op, register);
+        })
+    }
+
+    fn modify_textobject(cx: &mut Context, objtype: textobject::TextObject, op: Self) {
+        // Adapted from select_textobject
+
+        let count = cx.count();
+
+        cx.on_next_key(move |cx, event| {
+            cx.editor.autoinfo = None;
+            if let Some(ch) = event.char() {
+                let (view, doc) = current!(cx.editor);
+
+                let loader = cx.editor.syn_loader.load();
+                let text = doc.text().slice(..);
+
+                let textobject_treesitter = |obj_name: &str, range: Range| -> Range {
+                    let Some(syntax) = doc.syntax() else {
+                        return range;
+                    };
+                    textobject::textobject_treesitter(
+                        text, range, objtype, obj_name, syntax, &loader, count,
+                    )
+                };
+
+                let textobject_change = |range: Range| -> Range {
+                    let diff_handle = doc.diff_handle().unwrap();
+                    let diff = diff_handle.load();
+                    let line = range.cursor_line(text);
+                    let hunk_idx = if let Some(hunk_idx) = diff.hunk_at(line as u32, false) {
+                        hunk_idx
+                    } else {
+                        return range;
+                    };
+                    let hunk = diff.nth_hunk(hunk_idx).after;
+
+                    let start = text.line_to_char(hunk.start as usize);
+                    let end = text.line_to_char(hunk.end as usize);
+                    Range::new(start, end).with_direction(range.direction())
+                };
+                let mut is_valid = true;
+                let selection = doc.selection(view.id).clone().transform(|range| {
+                    match ch {
+                        'w' => textobject::textobject_word(text, range, objtype, count, false),
+                        'W' => textobject::textobject_word(text, range, objtype, count, true),
+                        't' => textobject_treesitter("class", range),
+                        'f' => textobject_treesitter("function", range),
+                        'a' => textobject_treesitter("parameter", range),
+                        'c' => textobject_treesitter("comment", range),
+                        'T' => textobject_treesitter("test", range),
+                        'e' => textobject_treesitter("entry", range),
+                        'p' => textobject::textobject_paragraph(text, range, objtype, count),
+                        'm' => textobject::textobject_pair_surround_closest(
+                            doc.syntax(),
+                            text,
+                            range,
+                            objtype,
+                            count,
+                        ),
+                        'g' => textobject_change(range),
+                        // TODO: cancel new ranges if inconsistent surround matches across lines
+                        ch if !ch.is_ascii_alphanumeric() => textobject::textobject_pair_surround(
+                            doc.syntax(),
+                            text,
+                            range,
+                            objtype,
+                            ch,
+                            count,
+                        ),
+                        _ => {
+                            is_valid = false;
+                            range
+                        }
+                    }
+                });
+                if is_valid {
+                    Self::run_operator(cx, op, cx.register, &selection, &selection);
+                }
+            }
+        });
+
+        let title = match objtype {
+            textobject::TextObject::Inside => "Match inside",
+            textobject::TextObject::Around => "Match around",
+            _ => return,
+        };
+        let help_text = [
+            ("w", "Word"),
+            ("W", "WORD"),
+            ("p", "Paragraph"),
+            ("t", "Type definition (tree-sitter)"),
+            ("f", "Function (tree-sitter)"),
+            ("a", "Argument/parameter (tree-sitter)"),
+            ("c", "Comment (tree-sitter)"),
+            ("T", "Test (tree-sitter)"),
+            ("e", "Data structure entry (tree-sitter)"),
+            ("m", "Closest surrounding pair (tree-sitter)"),
+            ("g", "Change"),
+            (" ", "... or any character acting as a pair"),
+        ];
+
+        cx.editor.autoinfo = Some(Info::new(title, &help_text));
     }
 }
