@@ -9,6 +9,7 @@ use helix_view::document::Mode;
 #[derive(Default)]
 pub struct AtomicState {
     visual_lines: AtomicBool,
+    highlight: AtomicBool,
 }
 
 pub static VIM_STATE: AtomicState = AtomicState::new();
@@ -17,6 +18,7 @@ impl AtomicState {
     pub const fn new() -> Self {
         Self {
             visual_lines: AtomicBool::new(false),
+            highlight: AtomicBool::new(false),
         }
     }
 
@@ -31,6 +33,18 @@ impl AtomicState {
     pub fn is_visual_line(&self) -> bool {
         self.visual_lines.load(Ordering::Relaxed)
     }
+
+    pub fn allow_highlight(&self) {
+        self.highlight.store(true, Ordering::Relaxed);
+    }
+
+    pub fn stop_highlight(&self) {
+        self.highlight.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_highlight(&self) -> bool {
+        self.highlight.load(Ordering::Relaxed)
+    }
 }
 
 pub struct VimOps;
@@ -38,7 +52,11 @@ pub struct VimOps;
 impl VimOps {
     pub fn hook_after_each_command(cx: &mut Context) {
         if cx.editor.mode != Mode::Select {
-            collapse_selection(cx);
+            if !VIM_STATE.is_highlight() {
+                collapse_selection(cx);
+            } else {
+                VIM_STATE.stop_highlight();
+            }
         } else {
             // check if visual lines
             if VIM_STATE.is_visual_line() {
@@ -206,10 +224,12 @@ mod vim_commands {
     }
 
     pub fn vim_cursor_forward_search(cx: &mut Context) {
+        VIM_STATE.allow_highlight();
         vim_utils::cursor_search_impl(cx, Direction::Forward);
     }
 
     pub fn vim_cursor_backward_search(cx: &mut Context) {
+        VIM_STATE.allow_highlight();
         vim_utils::cursor_search_impl(cx, Direction::Backward);
     }
 }
