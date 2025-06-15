@@ -11,6 +11,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "k" | "up" => move_visual_line_up,
         "l" | "right" => move_char_right,
 
+        "*" => vim_cursor_forward_search,
+        "#" => vim_cursor_backward_search,
+
         "0" => goto_line_start,
         "$" => goto_line_end,
         "^" => goto_first_nonwhitespace,
@@ -151,7 +154,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "?" => rsearch,
         "n" => search_next,
         "N" => search_prev,
-        "*" => search_selection_detect_word_boundaries,
+        // "*" => search_selection_detect_word_boundaries,
         "A-*" => search_selection,
 
         "u" => undo,
