@@ -166,7 +166,7 @@ macro_rules! static_commands_with_default {
         vim_extend_next_long_word_start, "Extend to start of next long word (vim)",
         vim_extend_visual_line_up, "Move up (vim)",
         vim_extend_visual_line_down, "Move down (vim)",
-        vim_goto_line, "Go to line (vim)",
+        vim_goto_last_line, "Go to line (vim)",
         vim_move_paragraph_forward, "Move by paragraph forward (vim)",
         vim_move_paragraph_backward, "Move by paragraph forward (vim)",
         vim_cursor_forward_search, "Forward search for word near cursor (vim)",
@@ -217,11 +217,20 @@ mod vim_commands {
         after = extend_char_right
     );
 
-    pub fn vim_goto_line(cx: &mut Context) {
+    pub fn vim_goto_last_line(cx: &mut Context) {
         if cx.count.is_none() {
-            goto_last_line(cx);
+            if cx.editor.mode == Mode::Select {
+                extend_to_last_line(cx)
+            } else {
+                goto_last_line(cx);
+            }
         } else {
-            goto_line(cx);
+            // Works the same as gg
+            if cx.editor.mode == Mode::Select {
+                goto_file_start(cx);
+            } else {
+                extend_to_file_start(cx);
+            }
         }
     }
 
@@ -720,8 +729,12 @@ impl VimOpCtx {
             if let Some(ch) = event.char() {
                 match ch {
                     'd' | 'y' | 'c' => opcx.run_operator_lines(cx),
-                    'i' => Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Inside),
-                    'a' => Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Around),
+                    'i' => {
+                        Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Inside)
+                    }
+                    'a' => {
+                        Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Around)
+                    }
                     't' => opcx.op_till_char(cx),
                     'f' => opcx.op_next_char(cx),
                     'T' => opcx.op_till_prev_char(cx),
