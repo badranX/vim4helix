@@ -182,6 +182,7 @@ macro_rules! static_commands_with_default {
         vim_find_next_char, "Move to next occurrence of char (vim)",
         vim_till_prev_char, "Move till previous occurrence of char (vim)",
         vim_find_prev_char, "Move to previous occurrence of char (vim)",
+        vim_append, "Append text after the cursor (vim)",
             $($name, $doc,)*
         }
     };
@@ -344,6 +345,11 @@ mod vim_commands {
 
     pub fn vim_find_prev_char(cx: &mut Context) {
         VimOpCtx::vim_find_char(cx, None, Direction::Backward, true, false);
+    }
+
+    pub fn vim_append(cx: &mut Context) {
+        append_mode(cx);
+        collapse_selection(cx);
     }
 }
 
