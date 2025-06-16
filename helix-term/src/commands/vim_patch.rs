@@ -178,6 +178,10 @@ macro_rules! static_commands_with_default {
         vim_delete_till_line_end, "Delete till line end (vim)",
         vim_delete_any_selection, "Delete any Helix selection, `x` (vim)",
         vim_restore_last_selection, "Restore last visual-mode selection (vim)",
+        vim_find_till_char, "Move till next occurrence of char (vim)",
+        vim_find_next_char, "Move to next occurrence of char (vim)",
+        vim_till_prev_char, "Move till previous occurrence of char (vim)",
+        vim_find_prev_char, "Move to previous occurrence of char (vim)",
             $($name, $doc,)*
         }
     };
@@ -324,6 +328,22 @@ mod vim_commands {
                 doc.set_selection(view_id, gv_selection);
             }
         }
+    }
+
+    pub fn vim_find_till_char(cx: &mut Context) {
+        VimOpCtx::vim_find_char(cx, None, Direction::Forward, false, false);
+    }
+
+    pub fn vim_find_next_char(cx: &mut Context) {
+        VimOpCtx::vim_find_char(cx, None, Direction::Forward, true, false);
+    }
+
+    pub fn vim_till_prev_char(cx: &mut Context) {
+        VimOpCtx::vim_find_char(cx, None, Direction::Backward, false, false);
+    }
+
+    pub fn vim_find_prev_char(cx: &mut Context) {
+        VimOpCtx::vim_find_char(cx, None, Direction::Backward, true, false);
     }
 }
 

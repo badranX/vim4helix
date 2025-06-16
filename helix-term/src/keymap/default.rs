@@ -30,10 +30,10 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "%" => match_brackets,
 
-        "t" => find_till_char,
-        "f" => find_next_char,
-        "T" => till_prev_char,
-        "F" => find_prev_char,
+        "t" => vim_find_till_char,
+        "f" => vim_find_next_char,
+        "T" => vim_till_prev_char,
+        "F" => vim_find_prev_char,
         "r" => replace,
         "R" => replace_with_yanked,
         "A-." =>  repeat_last_motion,
