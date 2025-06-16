@@ -277,41 +277,37 @@ mod vim_commands {
     }
 
     pub fn vim_delete(cx: &mut Context) {
-        VimModifier::operator_impl(cx, VimModifier::Delete, cx.register);
+        VimOpCtx::operator_impl(cx, VimOp::Delete, cx.register);
     }
 
     pub fn vim_yank(cx: &mut Context) {
-        VimModifier::operator_impl(cx, VimModifier::Yank, cx.register);
+        VimOpCtx::operator_impl(cx, VimOp::Yank, cx.register);
     }
 
     pub fn vim_yank_to_clipboard(cx: &mut Context) {
-        VimModifier::operator_impl(cx, VimModifier::Yank, Some('+'));
+        VimOpCtx::operator_impl(cx, VimOp::Yank, Some('+'));
     }
 
     pub fn vim_change(cx: &mut Context) {
-        VimModifier::operator_impl(cx, VimModifier::Change, cx.register);
+        VimOpCtx::operator_impl(cx, VimOp::Change, cx.register);
     }
 
     pub fn vim_delete_till_line_end(cx: &mut Context) {
         match cx.editor.mode {
             Mode::Normal => {
                 extend_to_line_end(cx);
-                VimModifier::run_operator_for_current_selection(
-                    cx,
-                    VimModifier::Delete,
-                    cx.register,
-                );
+                VimOpCtx::new(cx, VimOp::Delete).run_operator_for_current_selection(cx);
                 normal_mode(cx);
             }
             Mode::Select => {
-                VimModifier::run_operator_lines(cx, VimModifier::Delete, cx.register, 1);
+                VimOpCtx::new(cx, VimOp::Delete).run_operator_lines(cx);
             }
             _ => (),
         }
     }
 
     pub fn vim_delete_any_selection(cx: &mut Context) {
-        VimModifier::run_operator_for_current_selection(cx, VimModifier::Delete, cx.register);
+        VimOpCtx::new(cx, VimOp::Delete).run_operator_for_current_selection(cx);
         normal_mode(cx);
     }
 
@@ -512,13 +508,36 @@ mod vim_utils {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VimModifier {
+pub enum VimOp {
     Yank,
     Delete,
     Change,
 }
 
-impl VimModifier {
+#[derive(Clone, Copy)]
+pub struct VimOpCtx {
+    op: VimOp,
+    count: Option<usize>,
+    register: Option<char>,
+}
+
+impl VimOpCtx {
+    fn new(cx: &mut Context, op: VimOp) -> Self {
+        Self {
+            op,
+            count: Some(cx.count()),
+            register: cx.register,
+        }
+    }
+
+    fn with_custom_register(cx: &mut Context, op: VimOp, register: Option<char>) -> Self {
+        Self {
+            op,
+            count: Some(cx.count()),
+            register,
+        }
+    }
+
     fn get_full_line_selection(
         cx: &mut Context,
         count: usize,
@@ -572,21 +591,19 @@ impl VimModifier {
     }
 
     fn run_ops_after_command(
+        &self,
         cx: &mut Context,
         fun: fn(cx: &mut Context),
-        op: Self,
-        register: Option<char>,
-        count: usize,
         require_visual: bool,
     ) {
         if require_visual {
             select_mode(cx);
         }
 
-        cx.count = std::num::NonZeroUsize::new(count);
+        cx.count = std::num::NonZeroUsize::new(self.count.unwrap_or(1));
 
         fun(cx);
-        Self::run_operator_for_current_selection(cx, op, register);
+        self.run_operator_for_current_selection(cx);
 
         if require_visual {
             normal_mode(cx);
@@ -594,42 +611,42 @@ impl VimModifier {
     }
 
     fn run_operator(
+        &self,
         cx: &mut Context,
-        op: Self,
-        register: Option<char>,
         selection_to_yank: &Selection,
         selection_to_delete: &Selection,
     ) {
-        Self::yank_selection(cx.editor, selection_to_yank, register);
+        Self::yank_selection(cx.editor, selection_to_yank, self.register);
 
-        match op {
-            Self::Delete | Self::Change => {
+        match self.op {
+            VimOp::Delete | VimOp::Change => {
                 Self::delete_selection_without_yank(cx, selection_to_delete);
             }
             _ => return,
         }
 
-        if op == Self::Change {
+        if self.op == VimOp::Change {
             insert_mode(cx);
         }
     }
 
-    fn run_operator_for_current_selection(cx: &mut Context, op: Self, register: Option<char>) {
+    fn run_operator_for_current_selection(&self, cx: &mut Context) {
         let (view, doc) = current!(cx.editor);
         let selection = doc.selection(view.id).clone();
 
         flip_selections(cx);
         collapse_selection(cx);
-        Self::run_operator(cx, op, register, &selection, &selection);
+        self.run_operator(cx, &selection, &selection);
     }
 
-    fn run_operator_lines(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
+    fn run_operator_lines(&self, cx: &mut Context) {
+        let count = self.count.unwrap_or(1);
         let selection = Self::get_full_line_selection(cx, count, true);
-        if op != Self::Change {
-            Self::run_operator(cx, op, register, &selection, &selection);
+        if self.op != VimOp::Change {
+            self.run_operator(cx, &selection, &selection);
         } else {
             let delete_selection = Self::get_full_line_selection(cx, count, false);
-            Self::run_operator(cx, op, register, &selection, &delete_selection);
+            self.run_operator(cx, &selection, &delete_selection);
         }
     }
 
@@ -648,55 +665,54 @@ impl VimModifier {
         }
     }
 
-    fn op_till_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
-        Self::run_op_find_char(cx, Direction::Forward, false, true, count, register, op);
+    fn op_till_char(&self, cx: &mut Context) {
+        Self::vim_find_char(cx, Some(*self), Direction::Forward, false, true);
     }
 
-    fn op_next_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
-        Self::run_op_find_char(cx, Direction::Forward, true, true, count, register, op);
+    fn op_next_char(&self, cx: &mut Context) {
+        Self::vim_find_char(cx, Some(*self), Direction::Forward, true, true);
     }
 
-    fn op_till_prev_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
-        Self::run_op_find_char(cx, Direction::Backward, false, true, count, register, op);
+    fn op_till_prev_char(&self, cx: &mut Context) {
+        Self::vim_find_char(cx, Some(*self), Direction::Backward, false, true);
     }
 
-    fn op_prev_char(cx: &mut Context, op: Self, register: Option<char>, count: usize) {
-        Self::run_op_find_char(cx, Direction::Backward, true, true, count, register, op);
+    fn op_prev_char(&self, cx: &mut Context) {
+        Self::vim_find_char(cx, Some(*self), Direction::Backward, true, true);
     }
 
-    pub fn operator_impl(cx: &mut Context, op: Self, register: Option<char>) {
+    pub fn operator_impl(cx: &mut Context, op: VimOp, register: Option<char>) {
+        let opcx = Self::with_custom_register(cx, op, register);
         if cx.editor.mode == Mode::Select {
-            Self::run_operator_for_current_selection(cx, op, register);
+            opcx.run_operator_for_current_selection(cx);
             exit_select_mode(cx);
             return;
         }
-
-        let default_count = cx.count();
 
         cx.on_next_key(move |cx, event| {
             cx.editor.autoinfo = None;
             if let Some(ch) = event.char() {
                 match ch {
-                    'd' | 'y' | 'c' => Self::run_operator_lines(cx, op, register, default_count),
-                    'i' => Self::modify_textobject(cx, textobject::TextObject::Inside, op),
-                    'a' => Self::modify_textobject(cx, textobject::TextObject::Around, op),
-                    't' => Self::op_till_char(cx, op, register, default_count),
-                    'f' => Self::op_next_char(cx, op, register, default_count),
-                    'T' => Self::op_till_prev_char(cx, op, register, default_count),
-                    'F' => Self::op_prev_char(cx, op, register, default_count),
+                    'd' | 'y' | 'c' => opcx.run_operator_lines(cx),
+                    'i' => Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Inside),
+                    'a' => Self::vim_modify_textobject(cx, Some(opcx), textobject::TextObject::Around),
+                    't' => opcx.op_till_char(cx),
+                    'f' => opcx.op_next_char(cx),
+                    'T' => opcx.op_till_prev_char(cx),
+                    'F' => opcx.op_prev_char(cx),
                     _ => (),
                 }
 
                 if let Some(cmd_ch) = Self::char_to_instant_command(ch) {
-                    Self::run_ops_after_command(cx, cmd_ch, op, register, default_count, true);
+                    opcx.run_ops_after_command(cx, cmd_ch, true);
                 }
             }
         });
 
         let repeated_key = match op {
-            Self::Delete => ("d", "Apply to lines"),
-            Self::Yank => ("y", "Apply to lines"),
-            Self::Change => ("c", "Apply to lines"),
+            VimOp::Delete => ("d", "Apply to lines"),
+            VimOp::Yank => ("y", "Apply to lines"),
+            VimOp::Change => ("c", "Apply to lines"),
         };
         let help_text = [
             ("i", "Apply inside"),
@@ -708,16 +724,20 @@ impl VimModifier {
         cx.editor.autoinfo = Some(Info::new("Apply Modifier", &help_text));
     }
 
-    fn run_op_find_char(
+    fn vim_find_char(
         cx: &mut Context,
+        opcx: Option<VimOpCtx>,
         direction: Direction,
         inclusive: bool,
         extend: bool,
-        count: usize,
-        register: Option<char>,
-        op: Self,
     ) {
         // Almost Copy/Paste from commands::find_char
+
+        let count = if let Some(opcx) = opcx {
+            opcx.count.unwrap_or(1)
+        } else {
+            cx.count()
+        };
 
         // TODO: count is reset to 1 before next key so we move it into the closure here.
         // Would be nice to carry over.
@@ -757,14 +777,27 @@ impl VimModifier {
             };
 
             cx.editor.apply_motion(motion);
-            Self::run_operator_for_current_selection(cx, op, register);
+
+            if let Some(opcx) = opcx {
+                opcx.run_operator_for_current_selection(cx);
+            } else if cx.editor.mode == Mode::Normal {
+                collapse_selection(cx)
+            }
         })
     }
 
-    fn modify_textobject(cx: &mut Context, objtype: textobject::TextObject, op: Self) {
+    fn vim_modify_textobject(
+        cx: &mut Context,
+        opcx: Option<VimOpCtx>,
+        objtype: textobject::TextObject,
+    ) {
         // Adapted from select_textobject
 
-        let count = cx.count();
+        let count = if let Some(opcx) = opcx {
+            opcx.count.unwrap_or(1)
+        } else {
+            cx.count()
+        };
 
         cx.on_next_key(move |cx, event| {
             cx.editor.autoinfo = None;
@@ -833,8 +866,11 @@ impl VimModifier {
                         }
                     }
                 });
-                if is_valid {
-                    Self::run_operator(cx, op, cx.register, &selection, &selection);
+
+                if let Some(opcx) = opcx {
+                    if is_valid {
+                        opcx.run_operator(cx, &selection, &selection);
+                    }
                 }
             }
         });
