@@ -53,7 +53,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "B" => move_prev_long_word_start,
         "E" => move_next_long_word_end,
 
-        "v" => select_mode,
+        "v" => vim_select_mode,
         "V" => vim_visual_lines,
         "G" => vim_goto_last_line,
         "g" => { "Goto"
