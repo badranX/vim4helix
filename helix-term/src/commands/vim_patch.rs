@@ -227,9 +227,9 @@ mod vim_commands {
         } else {
             // Works the same as gg
             if cx.editor.mode == Mode::Select {
-                goto_file_start(cx);
-            } else {
                 extend_to_file_start(cx);
+            } else {
+                goto_file_start(cx);
             }
         }
     }
