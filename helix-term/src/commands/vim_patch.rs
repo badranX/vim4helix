@@ -725,6 +725,7 @@ impl VimOpCtx {
     pub fn operator_impl(cx: &mut Context, op: VimOp, register: Option<char>) {
         let opcx = Self::with_custom_register(cx, op, register);
         if cx.editor.mode == Mode::Select {
+            VIM_STATE.exit_visual_line();
             opcx.run_operator_for_current_selection(cx);
             exit_select_mode(cx);
             return;
