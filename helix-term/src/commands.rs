@@ -287,7 +287,7 @@ impl MappableCommand {
                 }));
             }
         }
-        vim_helix_patch::hook_after_each_command(cx, self);
+        vim_hx_hooks::hook_after_each_command(cx, self);
     }
 
     pub fn name(&self) -> &str {

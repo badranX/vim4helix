@@ -69,7 +69,7 @@ impl AtomicState {
     }
 }
 
-pub mod vim_helix_patch {
+pub mod vim_hx_hooks {
     use super::*;
 
     pub fn hook_after_each_command(cx: &mut Context, cmd: &MappableCommand) {
@@ -79,6 +79,7 @@ pub mod vim_helix_patch {
                 if VIM_STATE.is_visual_line() {
                     extend_to_line_bounds(cx);
                 }
+                VIM_STATE.save_current_selection(cx);
             }
             Mode::Normal => {
                 if VIM_STATE.is_highlight_allowed() {
@@ -328,12 +329,18 @@ mod vim_commands {
 
     pub fn vim_restore_last_selection(cx: &mut Context) {
         if let Some((gv_selection, id)) = VIM_STATE.get_gv_selection() {
-            let (view_id, doc_id) = {
+            let (view_id, doc_id, text_len) = {
                 let (view, doc) = current!(cx.editor);
-                (view.id, doc.id())
+                (view.id, doc.id(), doc.text().len_chars())
             };
 
             if doc_id == id {
+                let sel_len: usize = gv_selection.ranges().iter().map(|range| range.len()).sum();
+                if sel_len > text_len {
+                    return;
+                }
+
+                // TODO implement visual lines as well
                 select_mode(cx);
                 let (_, doc) = current!(cx.editor);
                 doc.set_selection(view_id, gv_selection);
