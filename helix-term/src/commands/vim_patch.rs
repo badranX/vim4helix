@@ -185,6 +185,10 @@ macro_rules! static_commands_with_default {
         vim_find_prev_char, "Move to previous occurrence of char (vim)",
         vim_append, "Append text after the cursor (vim)",
         vim_select_mode, "Enter selection extend mode (vim)",
+        vim_paste_after, "Paste after selection (vim)",
+        vim_paste_before, "Paste before selection (vim)",
+        vim_paste_clipboard_after, "Paste clipboard after selections (vim)",
+        vim_paste_clipboard_before, "Paste clipboard before selections (vim)",
             $($name, $doc,)*
         }
     };
@@ -372,6 +376,38 @@ mod vim_commands {
     pub fn vim_select_mode(cx: &mut Context) {
         VIM_STATE.exit_visual_line();
         select_mode(cx);
+    }
+
+    pub fn vim_paste_after(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            replace_with_yanked(cx);
+        } else {
+            paste_after(cx);
+        }
+    }
+
+    pub fn vim_paste_before(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            replace_with_yanked(cx);
+        } else {
+            paste_before(cx);
+        }
+    }
+
+    pub fn vim_paste_clipboard_after(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            replace_selections_with_clipboard(cx);
+        } else {
+            paste_clipboard_after(cx);
+        }
+    }
+
+    pub fn vim_paste_clipboard_before(cx: &mut Context) {
+        if cx.editor.mode == Mode::Select {
+            replace_selections_with_clipboard(cx);
+        } else {
+            paste_clipboard_before(cx);
+        }
     }
 }
 

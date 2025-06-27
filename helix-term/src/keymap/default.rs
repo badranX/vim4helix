@@ -174,9 +174,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "y" => vim_yank,
         // yank_all
-        "p" => paste_after,
+        "p" => vim_paste_after,
         // paste_all
-        "P" => paste_before,
+        "P" => vim_paste_before,
 
         "Q" => record_macro,
         "q" => replay_macro,
@@ -302,8 +302,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "y" => vim_yank_to_clipboard,
             "Y" => yank_main_selection_to_clipboard,
-            "p" => paste_clipboard_after,
-            "P" => paste_clipboard_before,
+            "p" => vim_paste_clipboard_after,
+            "P" => vim_paste_clipboard_before,
             "R" => replace_selections_with_clipboard,
             "/" => global_search,
             "k" => hover,
