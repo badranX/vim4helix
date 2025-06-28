@@ -4,7 +4,10 @@ use std::sync::{
 };
 
 use crate::commands::*;
-use helix_core::graphemes::prev_grapheme_boundary;
+
+use helix_core::graphemes::{
+    nth_next_grapheme_boundary, nth_prev_grapheme_boundary, prev_grapheme_boundary,
+};
 use helix_core::line_ending::rope_is_line_ending;
 use helix_core::{textobject, Range, RopeSlice, Selection, Transaction};
 use helix_view::{document::Mode, DocumentId};
@@ -189,6 +192,8 @@ macro_rules! static_commands_with_default {
         vim_paste_before, "Paste before selection (vim)",
         vim_paste_clipboard_after, "Paste clipboard after selections (vim)",
         vim_paste_clipboard_before, "Paste clipboard before selections (vim)",
+        vim_move_char_left, "Move left (vim)",
+        vim_move_char_right, "Move right (vim)",
             $($name, $doc,)*
         }
     };
@@ -409,6 +414,24 @@ mod vim_commands {
             paste_clipboard_before(cx);
         }
     }
+
+    pub fn vim_move_char_left(cx: &mut Context) {
+        move_impl(
+            cx,
+            vim_utils::vim_move_horizontally,
+            Direction::Backward,
+            Movement::Move,
+        )
+    }
+
+    pub fn vim_move_char_right(cx: &mut Context) {
+        move_impl(
+            cx,
+            vim_utils::vim_move_horizontally,
+            Direction::Forward,
+            Movement::Move,
+        )
+    }
 }
 
 mod vim_utils {
@@ -463,6 +486,57 @@ mod vim_utils {
             range.put_cursor(slice, head, true).anchor
         };
         Range::new(anchor, head)
+    }
+
+    pub fn is_line_end(slice: RopeSlice, range: Range, line: usize) -> bool {
+        let new_line_char =
+            prev_grapheme_boundary(slice, slice.line_to_char(line + 1)) == range.cursor(slice);
+
+        let line_end =
+            prev_grapheme_boundary(slice, line_end_char_index(&slice, line)) == range.cursor(slice);
+
+        line_end || new_line_char
+    }
+
+    pub fn vim_move_horizontally(
+        slice: RopeSlice,
+        range: Range,
+        dir: Direction,
+        count: usize,
+        behaviour: Movement,
+        _: &TextFormat,
+        _: &mut TextAnnotations,
+    ) -> Range {
+        let line = range.cursor_line(slice);
+
+        let line_start = slice.line_to_char(line) == range.cursor(slice);
+        let line_end = is_line_end(slice, range, line);
+
+        // Check horizontall boundaries
+        match dir {
+            Direction::Forward => {
+                if line_end {
+                    return range;
+                }
+            }
+            Direction::Backward => {
+                if line_start {
+                    return range;
+                }
+            }
+        };
+
+        // The following is copy/paste from movement::move_horizontally
+        let pos = range.cursor(slice);
+
+        // Compute the new position.
+        let new_pos = match dir {
+            Direction::Forward => nth_next_grapheme_boundary(slice, pos, count),
+            Direction::Backward => nth_prev_grapheme_boundary(slice, pos, count),
+        };
+
+        // Compute the final new range.
+        range.put_cursor(slice, new_pos, behaviour == Movement::Extend)
     }
 
     pub fn movement_paragraph_forward(
