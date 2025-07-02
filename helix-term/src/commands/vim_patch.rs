@@ -194,6 +194,7 @@ macro_rules! static_commands_with_default {
         vim_paste_clipboard_before, "Paste clipboard before selections (vim)",
         vim_move_char_left, "Move left (vim)",
         vim_move_char_right, "Move right (vim)",
+        vim_select_regex, "Select all regex matches inside selections (vim)",
             $($name, $doc,)*
         }
     };
@@ -431,6 +432,11 @@ mod vim_commands {
             Direction::Forward,
             Movement::Move,
         )
+    }
+
+    pub fn vim_select_regex(cx: &mut Context) {
+        VIM_STATE.exit_visual_line();
+        select_regex(cx);
     }
 }
 
