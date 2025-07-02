@@ -388,6 +388,7 @@ mod vim_commands {
         if cx.editor.mode == Mode::Select {
             replace_with_yanked(cx);
         } else {
+            vim_utils::avoid_helix_newline_grapheme(cx);
             paste_after(cx);
         }
     }
@@ -404,6 +405,7 @@ mod vim_commands {
         if cx.editor.mode == Mode::Select {
             replace_selections_with_clipboard(cx);
         } else {
+            vim_utils::avoid_helix_newline_grapheme(cx);
             paste_clipboard_after(cx);
         }
     }
@@ -543,6 +545,43 @@ mod vim_utils {
 
         // Compute the final new range.
         range.put_cursor(slice, new_pos, behaviour == Movement::Extend)
+    }
+
+    fn avoid_range_newline(slice: RopeSlice, range: Range, behaviour: Movement) -> Range {
+        let line = range.cursor_line(slice);
+
+        let line_start = slice.line_to_char(line) == range.cursor(slice);
+
+        let newline_grapheme =
+            prev_grapheme_boundary(slice, slice.line_to_char(line + 1)) == range.cursor(slice);
+
+        if !newline_grapheme {
+            return range;
+        } else if newline_grapheme && line_start {
+            // Empty line case, can't be avoided
+            return range;
+        }
+
+        let pos = range.cursor(slice);
+
+        // Compute the new position.
+        let new_pos = prev_grapheme_boundary(slice, pos);
+
+        // Compute the final new range.
+        range.put_cursor(slice, new_pos, behaviour == Movement::Extend)
+    }
+
+    pub fn avoid_helix_newline_grapheme(cx: &mut Context) {
+        let (view, doc) = current!(cx.editor);
+        let text = doc.text();
+        let slice = text.slice(..);
+
+        let selection = doc
+            .selection(view.id)
+            .clone()
+            .transform(|range| avoid_range_newline(slice, range, Movement::Move));
+
+        doc.set_selection(view.id, selection);
     }
 
     pub fn movement_paragraph_forward(
