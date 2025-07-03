@@ -16,6 +16,7 @@ use helix_view::{document::Mode, DocumentId};
 pub struct AtomicState {
     visual_lines: AtomicBool,
     highlight: AtomicBool,
+    vim_paste: AtomicBool,
     gv_selection: Mutex<Option<(Selection, DocumentId)>>,
 }
 
@@ -26,6 +27,7 @@ impl AtomicState {
         Self {
             visual_lines: AtomicBool::new(false),
             highlight: AtomicBool::new(false),
+            vim_paste: AtomicBool::new(false),
             gv_selection: Mutex::new(None),
         }
     }
@@ -70,6 +72,14 @@ impl AtomicState {
     pub fn is_highlight_allowed(&self) -> bool {
         self.highlight.load(Ordering::Relaxed)
     }
+
+    pub fn is_vim_paste(&self) -> bool {
+        self.vim_paste.load(Ordering::Relaxed)
+    }
+
+    pub fn set_vim_paste(&self, val: bool) {
+        self.vim_paste.store(val, Ordering::Relaxed);
+    }
 }
 
 pub mod vim_hx_hooks {
@@ -97,6 +107,23 @@ pub mod vim_hx_hooks {
             }
             _ => (),
         };
+    }
+
+    pub fn after_paste_start_pos(text: &Rope, range: &Range) -> usize {
+        // A hacky method to switch between helix/vim paste
+        if !VIM_STATE.is_vim_paste() {
+            return range.to();
+        }
+
+        let slice = text.slice(..);
+        let line = range.cursor_line(slice);
+        if range.len() <= 1
+            && prev_grapheme_boundary(slice, slice.line_to_char(line + 1)) == range.cursor(slice)
+        {
+            range.from()
+        } else {
+            range.to()
+        }
     }
 }
 
@@ -388,7 +415,9 @@ mod vim_commands {
         if cx.editor.mode == Mode::Select {
             replace_with_yanked(cx);
         } else {
-            vim_utils::avoid_helix_newline_grapheme(cx);
+            if !VIM_STATE.is_vim_paste() {
+                VIM_STATE.set_vim_paste(true);
+            }
             paste_after(cx);
         }
     }
@@ -405,7 +434,9 @@ mod vim_commands {
         if cx.editor.mode == Mode::Select {
             replace_selections_with_clipboard(cx);
         } else {
-            vim_utils::avoid_helix_newline_grapheme(cx);
+            if !VIM_STATE.is_vim_paste() {
+                VIM_STATE.set_vim_paste(true);
+            }
             paste_clipboard_after(cx);
         }
     }
@@ -545,43 +576,6 @@ mod vim_utils {
 
         // Compute the final new range.
         range.put_cursor(slice, new_pos, behaviour == Movement::Extend)
-    }
-
-    fn avoid_range_newline(slice: RopeSlice, range: Range, behaviour: Movement) -> Range {
-        let line = range.cursor_line(slice);
-
-        let line_start = slice.line_to_char(line) == range.cursor(slice);
-
-        let newline_grapheme =
-            prev_grapheme_boundary(slice, slice.line_to_char(line + 1)) == range.cursor(slice);
-
-        if !newline_grapheme {
-            return range;
-        } else if newline_grapheme && line_start {
-            // Empty line case, can't be avoided
-            return range;
-        }
-
-        let pos = range.cursor(slice);
-
-        // Compute the new position.
-        let new_pos = prev_grapheme_boundary(slice, pos);
-
-        // Compute the final new range.
-        range.put_cursor(slice, new_pos, behaviour == Movement::Extend)
-    }
-
-    pub fn avoid_helix_newline_grapheme(cx: &mut Context) {
-        let (view, doc) = current!(cx.editor);
-        let text = doc.text();
-        let slice = text.slice(..);
-
-        let selection = doc
-            .selection(view.id)
-            .clone()
-            .transform(|range| avoid_range_newline(slice, range, Movement::Move));
-
-        doc.set_selection(view.id, selection);
     }
 
     pub fn movement_paragraph_forward(

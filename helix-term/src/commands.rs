@@ -5000,7 +5000,7 @@ fn paste_impl(
             // paste insert
             (Paste::Before, false) => range.from(),
             // paste append
-            (Paste::After, false) => range.to(),
+            (Paste::After, false) => vim_hx_hooks::after_paste_start_pos(text, range),
             // paste at cursor
             (Paste::Cursor, _) => range.cursor(text.slice(..)),
         };
