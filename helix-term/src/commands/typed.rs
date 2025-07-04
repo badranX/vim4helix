@@ -3005,6 +3005,28 @@ const WRITE_NO_CODE_ACTIONS_FLAG: Flag = Flag {
 
 pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand {
+        name: "vim-disable",
+        aliases: &[],
+        doc: "Enable vim.hx",
+        fun: vim_typed_commands::vim_disable,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "vim-enable",
+        aliases: &[],
+        doc: "Disable vim.hx",
+        fun: vim_typed_commands::vim_enable,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
         name: "exit",
         aliases: &["x", "xit"],
         doc: "Write changes to disk if the buffer is modified and then quit. Accepts an optional path (:exit some/path.txt).",

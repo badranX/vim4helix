@@ -5,18 +5,20 @@ use std::sync::{
 
 use crate::commands::*;
 
+use helix_core::command_line::Args;
 use helix_core::graphemes::{
     nth_next_grapheme_boundary, nth_prev_grapheme_boundary, prev_grapheme_boundary,
 };
 use helix_core::line_ending::rope_is_line_ending;
 use helix_core::{textobject, Range, RopeSlice, Selection, Transaction};
-use helix_view::{document::Mode, DocumentId};
+use helix_view::{document::Mode, editor::ConfigEvent, DocumentId};
 
 #[derive(Default)]
 pub struct AtomicState {
     visual_lines: AtomicBool,
     highlight: AtomicBool,
     vim_paste: AtomicBool,
+    vim_enabled: AtomicBool,
     gv_selection: Mutex<Option<(Selection, DocumentId)>>,
 }
 
@@ -28,6 +30,7 @@ impl AtomicState {
             visual_lines: AtomicBool::new(false),
             highlight: AtomicBool::new(false),
             vim_paste: AtomicBool::new(false),
+            vim_enabled: AtomicBool::new(true),
             gv_selection: Mutex::new(None),
         }
     }
@@ -80,12 +83,23 @@ impl AtomicState {
     pub fn set_vim_paste(&self, val: bool) {
         self.vim_paste.store(val, Ordering::Relaxed);
     }
+
+    pub fn is_vim_enabled(&self) -> bool {
+        self.vim_enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn set_vim_enabled(&self, val: bool) {
+        self.vim_enabled.store(val, Ordering::Relaxed);
+    }
 }
 
 pub mod vim_hx_hooks {
     use super::*;
 
     pub fn hook_after_each_command(cx: &mut Context, cmd: &MappableCommand) {
+        if !VIM_STATE.is_vim_enabled() {
+            return;
+        }
         match cx.editor.mode {
             Mode::Select => {
                 // check if visual lines
@@ -225,6 +239,46 @@ macro_rules! static_commands_with_default {
             $($name, $doc,)*
         }
     };
+}
+
+pub mod vim_typed_commands {
+    use super::*;
+
+    pub fn vim_toggle(
+        cx: &mut compositor::Context,
+        _args: Args,
+        _event: PromptEvent,
+    ) -> anyhow::Result<()> {
+        VIM_STATE.set_vim_enabled(!VIM_STATE.is_vim_enabled());
+
+        // The rest is copy/paste from typed::refresh_config
+        cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
+        Ok(())
+    }
+
+    pub fn vim_enable(
+        cx: &mut compositor::Context,
+        _args: Args,
+        _event: PromptEvent,
+    ) -> anyhow::Result<()> {
+        VIM_STATE.set_vim_enabled(true);
+
+        // The rest is copy/paste from typed::refresh_config
+        cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
+        Ok(())
+    }
+
+    pub fn vim_disable(
+        cx: &mut compositor::Context,
+        _args: Args,
+        _event: PromptEvent,
+    ) -> anyhow::Result<()> {
+        VIM_STATE.set_vim_enabled(false);
+
+        // The rest is copy/paste from typed::refresh_config
+        cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
+        Ok(())
+    }
 }
 
 pub use vim_commands::*;
