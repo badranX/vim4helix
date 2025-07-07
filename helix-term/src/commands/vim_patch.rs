@@ -114,7 +114,7 @@ pub mod vim_hx_hooks {
                 } else {
                     // TODO: optimize by avoiding string comparison
                     match cmd.name() {
-                        "select_all" | "search_next" | "search_prev" => (),
+                        "select_all" => (),
                         _ => collapse_selection(cx),
                     };
                 }
@@ -216,6 +216,11 @@ macro_rules! static_commands_with_default {
         vim_move_paragraph_backward, "Move by paragraph forward (vim)",
         vim_cursor_forward_search, "Forward search for word near cursor (vim)",
         vim_cursor_backward_search, "Backward search for word near cursor (vim)",
+        vim_search, "Search for regex pattern (vim)",
+        vim_rsearch, "Reverse search for regex pattern (vim)",
+        vim_search_next, "Select next search match (vim)",
+        vim_search_prev, "Select previous search match (vim)",
+        vim_match_brackets, "Goto matching bracket (vim)",
         vim_delete, "Delete operator (vim)",
         vim_change, "Change operator (vim)",
         vim_yank, "Change operator (vim)",
@@ -360,6 +365,7 @@ mod vim_commands {
     }
 
     pub fn vim_move_paragraph_forward(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
         goto_para_impl(cx, vim_utils::movement_paragraph_forward);
         if cx.editor.mode != Mode::Select {
             normal_mode(cx);
@@ -367,6 +373,7 @@ mod vim_commands {
     }
 
     pub fn vim_move_paragraph_backward(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
         goto_para_impl(cx, vim_utils::movement_paragraph_backward);
         if cx.editor.mode != Mode::Select {
             normal_mode(cx);
@@ -374,13 +381,44 @@ mod vim_commands {
     }
 
     pub fn vim_cursor_forward_search(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
         VIM_STATE.allow_highlight();
         vim_utils::cursor_search_impl(cx, Direction::Forward);
     }
 
     pub fn vim_cursor_backward_search(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
         VIM_STATE.allow_highlight();
         vim_utils::cursor_search_impl(cx, Direction::Backward);
+    }
+
+    pub fn vim_search(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
+        VIM_STATE.allow_highlight();
+        search(cx);
+    }
+
+    pub fn vim_rsearch(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
+        VIM_STATE.allow_highlight();
+        rsearch(cx);
+    }
+
+    pub fn vim_search_next(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
+        VIM_STATE.allow_highlight();
+        search_next(cx);
+    }
+
+    pub fn vim_search_prev(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
+        VIM_STATE.allow_highlight();
+        search_prev(cx);
+    }
+
+    pub fn vim_match_brackets(cx: &mut Context) {
+        vim_utils::vim_save_to_jumplist(cx);
+        match_brackets(cx);
     }
 
     pub fn vim_delete(cx: &mut Context) {
@@ -755,6 +793,12 @@ mod vim_utils {
             }
         }
         search_next_or_prev_impl(cx, Movement::Move, direction);
+    }
+
+    pub fn vim_save_to_jumplist(cx: &mut Context) {
+        // TODO: Vim jumplist doesn't dublicate locations (e.g. multiple match_brackets)
+        let (view, doc) = current!(cx.editor);
+        push_jump(view, doc);
     }
 }
 

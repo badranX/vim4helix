@@ -434,7 +434,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
 
         "x" => vim_delete_any_selection,
 
-        "%" => match_brackets,
+        "%" => vim_match_brackets,
 
         "t" => vim_find_till_char,
         "f" => vim_find_next_char,
@@ -528,7 +528,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
         "A-x" => shrink_to_line_bounds,
 
         "m" => { "Match"
-            "m" => match_brackets,
+            "m" => vim_match_brackets,
             "s" => surround_add,
             "r" => surround_replace,
             "d" => surround_delete,
@@ -566,10 +566,10 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
             "space" => add_newline_below,
         },
 
-        "/" => search,
-        "?" => rsearch,
-        "n" => search_next,
-        "N" => search_prev,
+        "/" => vim_search,
+        "?" => vim_rsearch,
+        "n" => vim_search_next,
+        "N" => vim_search_prev,
         // "*" => search_selection_detect_word_boundaries,
         "A-*" => search_selection,
 
