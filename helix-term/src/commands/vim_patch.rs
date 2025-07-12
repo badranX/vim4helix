@@ -18,7 +18,9 @@ pub struct AtomicState {
     visual_lines: AtomicBool,
     highlight: AtomicBool,
     vim_paste: AtomicBool,
-    vim_enabled: AtomicBool,
+    cmd_hook_enabled: AtomicBool,
+    vim_mode: AtomicBool,
+    vim_pend_enable: AtomicBool,
     gv_selection: Mutex<Option<(Selection, DocumentId)>>,
 }
 
@@ -30,7 +32,9 @@ impl AtomicState {
             visual_lines: AtomicBool::new(false),
             highlight: AtomicBool::new(false),
             vim_paste: AtomicBool::new(false),
-            vim_enabled: AtomicBool::new(true),
+            cmd_hook_enabled: AtomicBool::new(true),
+            vim_mode: AtomicBool::new(true),
+            vim_pend_enable: AtomicBool::new(false),
             gv_selection: Mutex::new(None),
         }
     }
@@ -84,12 +88,29 @@ impl AtomicState {
         self.vim_paste.store(val, Ordering::Relaxed);
     }
 
-    pub fn is_vim_enabled(&self) -> bool {
-        self.vim_enabled.load(Ordering::Relaxed)
+    pub fn is_cmd_hook_enabled(&self) -> bool {
+        self.cmd_hook_enabled.load(Ordering::Relaxed)
     }
 
-    pub fn set_vim_enabled(&self, val: bool) {
-        self.vim_enabled.store(val, Ordering::Relaxed);
+    pub fn set_cmd_hook_enabled(&self, val: bool) {
+        self.cmd_hook_enabled.store(val, Ordering::Relaxed);
+    }
+
+    pub fn set_vim_mode(&self, val: bool) {
+        self.vim_mode.store(val, Ordering::Relaxed);
+        self.set_cmd_hook_enabled(val);
+    }
+
+    pub fn is_vim_mode(&self) -> bool {
+        self.vim_mode.load(Ordering::Relaxed)
+    }
+
+    pub fn is_vim_pend_enable(&self) -> bool {
+        self.vim_pend_enable.load(Ordering::Relaxed)
+    }
+
+    pub fn set_vim_pend_enable(&self, val: bool) {
+        self.vim_pend_enable.store(val, Ordering::Relaxed);
     }
 }
 
@@ -97,7 +118,11 @@ pub mod vim_hx_hooks {
     use super::*;
 
     pub fn hook_after_each_command(cx: &mut Context, _cmd: &MappableCommand) {
-        if !VIM_STATE.is_vim_enabled() {
+        if !VIM_STATE.is_cmd_hook_enabled() {
+            if VIM_STATE.is_vim_pend_enable() {
+                VIM_STATE.set_cmd_hook_enabled(true);
+                VIM_STATE.set_vim_pend_enable(false);
+            }
             return;
         }
         match cx.editor.mode {
@@ -238,6 +263,8 @@ macro_rules! static_commands_with_default {
         vim_move_char_right, "Move right (vim)",
         vim_select_regex, "Select all regex matches inside selections (vim.hx)",
         vim_select_all, "Select all in both normal and select mode (vim.hx)",
+        vim_cmd_off, "Allow Helix commands to run as intended (vim.hx)",
+        vim_cmd_on, "End vim_cmd_off, only works in Vim mode (vim.hx)",
             $($name, $doc,)*
         }
     };
@@ -251,7 +278,7 @@ pub mod vim_typed_commands {
         _args: Args,
         _event: PromptEvent,
     ) -> anyhow::Result<()> {
-        VIM_STATE.set_vim_enabled(!VIM_STATE.is_vim_enabled());
+        VIM_STATE.set_vim_mode(!VIM_STATE.is_vim_mode());
 
         // The rest is copy/paste from typed::refresh_config
         cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
@@ -263,7 +290,7 @@ pub mod vim_typed_commands {
         _args: Args,
         _event: PromptEvent,
     ) -> anyhow::Result<()> {
-        VIM_STATE.set_vim_enabled(true);
+        VIM_STATE.set_vim_mode(true);
 
         // The rest is copy/paste from typed::refresh_config
         cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
@@ -275,7 +302,7 @@ pub mod vim_typed_commands {
         _args: Args,
         _event: PromptEvent,
     ) -> anyhow::Result<()> {
-        VIM_STATE.set_vim_enabled(false);
+        VIM_STATE.set_vim_mode(false);
 
         // The rest is copy/paste from typed::refresh_config
         cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
@@ -565,6 +592,16 @@ mod vim_commands {
         VIM_STATE.exit_visual_line();
         VIM_STATE.allow_highlight();
         select_all(cx);
+    }
+
+    pub fn vim_cmd_off(_cx: &mut Context) {
+        VIM_STATE.set_cmd_hook_enabled(false);
+    }
+
+    pub fn vim_cmd_on(_cx: &mut Context) {
+        if VIM_STATE.is_vim_mode() {
+            VIM_STATE.set_vim_pend_enable(true);
+        }
     }
 }
 

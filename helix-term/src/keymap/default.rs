@@ -842,7 +842,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
 }
 
 pub fn default() -> HashMap<Mode, KeyTrie> {
-    if VIM_STATE.is_vim_enabled() {
+    if VIM_STATE.is_vim_mode() {
         vim_default()
     } else {
         helix_default()
