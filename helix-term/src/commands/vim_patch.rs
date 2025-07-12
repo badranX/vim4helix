@@ -96,7 +96,7 @@ impl AtomicState {
 pub mod vim_hx_hooks {
     use super::*;
 
-    pub fn hook_after_each_command(cx: &mut Context, cmd: &MappableCommand) {
+    pub fn hook_after_each_command(cx: &mut Context, _cmd: &MappableCommand) {
         if !VIM_STATE.is_vim_enabled() {
             return;
         }
@@ -112,11 +112,7 @@ pub mod vim_hx_hooks {
                 if VIM_STATE.is_highlight_allowed() {
                     VIM_STATE.reset_highlight();
                 } else {
-                    // TODO: optimize by avoiding string comparison
-                    match cmd.name() {
-                        "select_all" => (),
-                        _ => collapse_selection(cx),
-                    };
+                    collapse_selection(cx);
                 }
             }
             _ => (),
@@ -240,7 +236,8 @@ macro_rules! static_commands_with_default {
         vim_paste_clipboard_before, "Paste clipboard before selections (vim)",
         vim_move_char_left, "Move left (vim)",
         vim_move_char_right, "Move right (vim)",
-        vim_select_regex, "Select all regex matches inside selections (vim)",
+        vim_select_regex, "Select all regex matches inside selections (vim.hx)",
+        vim_select_all, "Select all in both normal and select mode (vim.hx)",
             $($name, $doc,)*
         }
     };
@@ -562,6 +559,12 @@ mod vim_commands {
     pub fn vim_select_regex(cx: &mut Context) {
         VIM_STATE.exit_visual_line();
         select_regex(cx);
+    }
+
+    pub fn vim_select_all(cx: &mut Context) {
+        VIM_STATE.exit_visual_line();
+        VIM_STATE.allow_highlight();
+        select_all(cx);
     }
 }
 
