@@ -117,7 +117,14 @@ impl AtomicState {
 pub mod vim_hx_hooks {
     use super::*;
 
-    pub fn hook_after_each_command(cx: &mut Context, _cmd: &MappableCommand) {
+    pub fn hook_after_each_command(cx: &mut Context, cmd: &MappableCommand) {
+        if !matches!(
+            cmd,
+            MappableCommand::Static { .. } | MappableCommand::Macro { .. }
+        ) {
+            return;
+        }
+
         if !VIM_STATE.is_cmd_hook_enabled() {
             if VIM_STATE.is_vim_pend_enable() {
                 VIM_STATE.set_cmd_hook_enabled(true);
