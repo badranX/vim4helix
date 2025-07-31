@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   deploy:
+    if: false # job not enabled on this fork
     runs-on: ubuntu-latest
     permissions:
       contents: write # peaceiris/actions-gh-pages pushes to the gh-pages branch

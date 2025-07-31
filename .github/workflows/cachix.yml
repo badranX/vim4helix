@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   publish:
+    if: false # job not enabled on this fork
     name: Publish Flake
     runs-on: ${{ matrix.os }}
     strategy:

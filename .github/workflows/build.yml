@@ -24,7 +24,7 @@ jobs:
   check:
     name: Check (msrv)
     runs-on: ubuntu-latest
-    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
+    if: false # job not enabled on this fork
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
@@ -40,7 +40,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ${{ matrix.os }}
-    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
+    if: false # job not enabled on this fork
     timeout-minutes: 30
     env:
       RUST_BACKTRACE: 1
@@ -69,7 +69,7 @@ jobs:
   lints:
     name: Lints
     runs-on: ubuntu-latest
-    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
+    if: false # job not enabled on this fork
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
@@ -94,7 +94,7 @@ jobs:
   docs:
     name: Grammar Lint
     runs-on: ubuntu-latest
-    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
+    if: false # job not enabled on this fork
     steps:
       - name: Checkout sources
         uses: actions/checkout@v7
