@@ -268,6 +268,7 @@ macro_rules! static_commands_with_default {
         $macro_to_call! {
         vim_visual_lines, "Visual lines (vim)",
         vim_normal_mode, "Normal mode (vim)",
+        vim_escape, "Switch to Normal mode and move char to left after Insertion (vim)",
         vim_exit_select_mode, "Exit select mode (vim)",
         vim_move_next_word_start, "Move to start of next word (vim)",
         vim_move_next_long_word_start, "Move next long word (vim)",
@@ -454,6 +455,20 @@ mod vim_commands {
         }
 
         VIM_STATE.exit_visual_modes();
+    }
+
+    pub fn vim_escape(cx: &mut Context) {
+        if cx.editor.mode == Mode::Insert {
+            vim_normal_mode(cx);
+            move_impl(
+                cx,
+                vim_utils::vim_hx_move_horizontally,
+                Direction::Backward,
+                Movement::Move,
+            );
+        } else {
+            vim_normal_mode(cx);
+        }
     }
 
     pub fn vim_exit_select_mode(cx: &mut Context) {
