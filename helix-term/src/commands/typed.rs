@@ -3027,6 +3027,17 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         },
     },
     TypableCommand {
+        name: "vim-sed",
+        aliases: &[],
+        doc: "run sed command (vim.hx)",
+        fun: vim_typed_commands::vim_sed,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, None),
+            ..Signature::DEFAULT
+        }
+    },
+    TypableCommand {
         name: "exit",
         aliases: &["x", "xit"],
         doc: "Write changes to disk if the buffer is modified and then quit. Accepts an optional path (:exit some/path.txt).",
@@ -4149,6 +4160,9 @@ fn execute_command_line(
     input: &str,
     event: PromptEvent,
 ) -> anyhow::Result<()> {
+    // Vim.hx: allow sed command
+    let input = &vim_typed_commands::vim_reformat_sed_command(input);
+
     let (command, rest, _) = command_line::split(input);
     if command.is_empty() {
         return Ok(());

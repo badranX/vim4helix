@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use crate::commands::*;
+mod vim_shell_patch;
 
 use helix_core::command_line::Args;
 use helix_core::graphemes::{
@@ -356,6 +357,65 @@ pub mod vim_typed_commands {
 
         // The rest is copy/paste from typed::refresh_config
         cx.editor.config_events.0.send(ConfigEvent::Refresh)?;
+        Ok(())
+    }
+
+    pub fn vim_reformat_sed_command(input: &str) -> String {
+        if input.starts_with("s/") || input.starts_with("s|") {
+            format!("vim-sed \"{}\"", &input.trim()[1..])
+        } else if input.starts_with("%s/") || input.starts_with("%s|") {
+            format!("vim-sed \"{}\"", &input.trim()[2..])
+        } else {
+            input.to_string()
+        }
+    }
+
+    pub fn vim_sed(
+        cx: &mut compositor::Context,
+        args: Args,
+        event: PromptEvent,
+    ) -> anyhow::Result<()> {
+        if event != PromptEvent::Validate {
+            return Ok(());
+        }
+
+        if args.len() > 1 {
+            cx.editor
+                .set_error("Space is not supported yet, please surround sed argument with \" or '");
+            return Ok(());
+        }
+
+        let (view, doc) = current!(cx.editor);
+        let prev_range = doc.selection(view.id).primary();
+
+        if let Some(user_input) = args.first() {
+            let mut user_input = user_input.to_owned();
+            if user_input.starts_with('"') && user_input.ends_with('"')
+                || user_input.starts_with('\'') && user_input.ends_with('\'')
+            {
+                user_input.pop();
+                user_input.remove(0);
+            }
+
+            // escape `"`
+            user_input = user_input.replace('\"', "\\\"");
+
+            let cmd = format!("{} \"s{}\"", "sed", user_input);
+            if cx.editor.mode != Mode::Select {
+                let end_char = doc.text().len_chars();
+                if end_char == 0 {
+                    return Ok(());
+                }
+                let input_range = Range::new(0, end_char);
+                vim_shell_patch::shell_explicit(cx, &cmd, input_range, prev_range);
+            } else {
+                vim_shell_patch::shell_on_success(cx, &cmd);
+            }
+
+            let (view, doc) = current!(cx.editor);
+            push_jump(view, doc);
+        }
+
         Ok(())
     }
 }
