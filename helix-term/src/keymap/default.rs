@@ -815,6 +815,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
 
         "C-s" => commit_undo_checkpoint,
         "C-x" => completion,
+        "C-n" => completion,
         "C-r" => insert_register,
 
         "C-w" | "A-backspace" => delete_word_backward,
