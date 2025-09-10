@@ -577,6 +577,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
 
         "u" => undo,
         "U" => redo,
+        "C-r" => redo,
         "A-u" => earlier,
         "A-U" => later,
 
@@ -796,6 +797,9 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
         "T" => extend_till_prev_char,
         "F" => extend_prev_char,
 
+        "u" => switch_to_lowercase,
+        "U" => switch_to_uppercase,
+
         "home" => extend_to_line_start,
         "end" => extend_to_line_end,
         "esc" => vim_exit_select_mode,
@@ -811,7 +815,7 @@ fn vim_default() -> HashMap<Mode, KeyTrie> {
         },
     }));
     let insert = keymap!({ "Insert mode"
-        "esc" => vim_normal_mode,
+        "esc" => vim_escape,
 
         "C-s" => commit_undo_checkpoint,
         "C-x" => completion,
