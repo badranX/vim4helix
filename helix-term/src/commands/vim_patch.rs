@@ -1273,14 +1273,13 @@ impl VimOpCtx {
     pub fn operator_impl(cx: &mut Context, op: VimOp, register: Option<char>) {
         let opcx = Self::with_custom_register(cx, op, register);
         if cx.editor.mode == Mode::Select {
-            if VIM_STATE.is_visual_block() {
+            if VIM_STATE.is_visual_block() && op == VimOp::Yank {
                 // Copy/Paste from yank_joined
                 let separator = doc!(cx.editor).line_ending.as_str();
                 yank_joined_impl(
                     cx.editor,
                     separator,
-                    cx.register
-                        .unwrap_or(cx.editor.config().default_yank_register),
+                    register.unwrap_or(cx.editor.config().default_yank_register),
                 );
                 vim_exit_select_mode(cx);
                 return;
