@@ -292,6 +292,9 @@ macro_rules! static_commands_with_default {
         vim_yank, "Change operator (vim)",
         vim_yank_to_clipboard, "Change operator (vim)",
         vim_delete_till_line_end, "Delete till line end (vim)",
+        vim_change_till_line_end, "Change till line end (vim)",
+        vim_substitute, "Substitute operator, `s` (vim)",
+        vim_substitute_lines, "Substitute lines operator, `S` (vim)",
         vim_delete_any_selection, "Delete any Helix selection, `x` (vim)",
         vim_restore_last_selection, "Restore last visual-mode selection (vim)",
         vim_find_till_char, "Move till next occurrence of char (vim)",
@@ -624,12 +627,35 @@ mod vim_commands {
                 extend_to_line_end(cx);
                 VimOpCtx::new(cx, VimOp::Delete).run_operator_for_current_selection(cx);
                 normal_mode(cx);
+                vim_move_char_left(cx);
             }
             Mode::Select => {
                 VimOpCtx::new(cx, VimOp::Delete).run_operator_lines(cx);
             }
             _ => (),
         }
+    }
+
+    pub fn vim_change_till_line_end(cx: &mut Context) {
+        match cx.editor.mode {
+            Mode::Normal => {
+                extend_to_line_end(cx);
+                VimOpCtx::new(cx, VimOp::Change).run_operator_for_current_selection(cx);
+                insert_mode(cx);
+            }
+            Mode::Select => {
+                VimOpCtx::new(cx, VimOp::Change).run_operator_lines(cx);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn vim_substitute(cx: &mut Context) {
+        VimOpCtx::new(cx, VimOp::Change).run_operator_for_current_selection(cx);
+    }
+
+    pub fn vim_substitute_lines(cx: &mut Context) {
+        VimOpCtx::new(cx, VimOp::Change).run_operator_lines(cx);
     }
 
     pub fn vim_delete_any_selection(cx: &mut Context) {
