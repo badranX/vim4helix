@@ -27,4 +27,8 @@ pub fn register() {
     register_event::<LanguageServerInitialized>();
     register_event::<LanguageServerExited>();
     register_event::<ConfigDidChange>();
+
+    // Native file watcher: reload open buffers on external changes
+    // (replaces the Steel helix-file-watcher plugin).
+    crate::file_watcher::register();
 }
