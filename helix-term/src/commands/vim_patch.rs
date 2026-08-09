@@ -1364,56 +1364,67 @@ impl VimOpCtx {
     ) {
         // Almost Copy/Paste from commands::find_char
 
+        // TODO: count is reset to 1 before next key so we move it into the closure here.
+        // Would be nice to carry over.
         let count = if let Some(opcx) = opcx {
             opcx.count.unwrap_or(1)
         } else {
             cx.count()
         };
 
-        // TODO: count is reset to 1 before next key so we move it into the closure here.
-        // Would be nice to carry over.
-
         // need to wait for next key
         // TODO: should this be done by grapheme rather than char?  For example,
         // we can't properly handle the line-ending CRLF case here in terms of char.
         cx.on_next_key(move |cx, event| {
-            let ch = match event {
-                KeyEvent {
-                    code: KeyCode::Enter,
-                    ..
-                } => {
-                    find_char_line_ending(cx, count, direction, inclusive, extend);
-                    return;
-                }
+            let motion: Motion = if event.code == KeyCode::Enter {
+                Box::new(move |editor: &mut Editor| {
+                    find_char_line_ending_motion(editor, count, direction, inclusive, extend);
+                })
+            } else if let Some(ch) = match event.code {
+                KeyCode::Tab => Some('\t'),
+                KeyCode::Char(ch) => Some(ch),
+                _ => None,
+            } {
+                Box::new(move |editor: &mut Editor| {
+                    let (view, doc) = current!(editor);
+                    let text = doc.text().slice(..);
 
-                KeyEvent {
-                    code: KeyCode::Tab, ..
-                } => '\t',
+                    let selection = doc.selection(view.id).clone().transform(|range| {
+                        let cursor_anchor = range.cursor(text);
+                        let cursor_head = next_grapheme_boundary(text, cursor_anchor);
 
-                KeyEvent {
-                    code: KeyCode::Char(ch),
-                    ..
-                } => ch,
-                _ => return,
-            };
-            let motion = move |editor: &mut Editor| {
-                match direction {
-                    Direction::Forward => {
-                        find_char_impl(editor, &find_next_char_impl, inclusive, extend, ch, count)
-                    }
-                    Direction::Backward => {
-                        find_char_impl(editor, &find_prev_char_impl, inclusive, extend, ch, count)
-                    }
-                };
+                        // Exclusive search skips the next char after cursor to enable repeated application
+                        let search_start_pos = match (inclusive, direction) {
+                            (true, Direction::Forward) => cursor_head,
+                            (true, Direction::Backward) => cursor_anchor,
+                            (false, Direction::Forward) => cursor_head + 1,
+                            (false, Direction::Backward) => cursor_anchor.saturating_sub(1),
+                        };
+
+                        search::find_nth_char(count, text, ch, search_start_pos, direction)
+                            // Exclusive search should stop on previous character
+                            .map(|pos| match (inclusive, direction) {
+                                (true, Direction::Forward) => pos,
+                                (true, Direction::Backward) => pos,
+                                (false, Direction::Forward) => pos - 1,
+                                (false, Direction::Backward) => pos + 1,
+                            })
+                            .map_or(range, |pos| {
+                                if extend {
+                                    range.put_cursor(text, pos, true)
+                                } else {
+                                    Range::point(range.cursor(text)).put_cursor(text, pos, true)
+                                }
+                            })
+                    });
+
+                    doc.set_selection(view.id, selection);
+                })
+            } else {
+                return;
             };
 
             cx.editor.apply_motion(motion);
-
-            if let Some(opcx) = opcx {
-                opcx.run_operator_for_current_selection(cx);
-            } else if cx.editor.mode == Mode::Normal {
-                collapse_selection(cx)
-            }
         })
     }
 
