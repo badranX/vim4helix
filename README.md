@@ -1,64 +1,105 @@
-<div align="center">
+<h1 align="center">Vim4Helix</h1>
 
-<h1>
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="logo_dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="logo_light.svg">
-  <img alt="Helix" height="128" src="logo_light.svg">
-</picture>
-</h1>
+A [Helix](https://helix-editor.com) patch that adds Vim emulation without affecting Helix’s editing capabilities like multi-cursor support and tree-sitter awareness.
+<br>
 
-[![Build status](https://github.com/helix-editor/helix/actions/workflows/build.yml/badge.svg)](https://github.com/helix-editor/helix/actions)
-[![GitHub Release](https://img.shields.io/github/v/release/helix-editor/helix)](https://github.com/helix-editor/helix/releases/latest)
-[![Documentation](https://shields.io/badge/-documentation-452859)](https://docs.helix-editor.com/)
-[![GitHub contributors](https://img.shields.io/github/contributors/helix-editor/helix)](https://github.com/helix-editor/helix/graphs/contributors)
-[![Matrix Space](https://img.shields.io/matrix/helix-community:matrix.org)](https://matrix.to/#/#helix-community:matrix.org)
+For a minimal patch containing only the Vim emulation changes on top of helix/master, see:
+https://github.com/badranX/helix/tree/vim4helix
 
-</div>
+## Installation
 
-![Screenshot](./screenshot.png)
+### Build from Source
 
-A [Kakoune](https://github.com/mawww/kakoune) / [Neovim](https://github.com/neovim/neovim) inspired editor, written in Rust.
+To get the latest, build this project from source—just like Helix itself.
+[Follow the official Helix build guide](https://docs.helix-editor.com/building-from-source.html)
 
-The editing model is very heavily based on Kakoune; during development I found
-myself agreeing with most of Kakoune's design decisions.
+### Pre-built binaries
 
-For more information, see the [website](https://helix-editor.com) or
-[documentation](https://docs.helix-editor.com/).
+Download pre-built binaries from the [GitHub Releases page](https://github.com/badranX/vim4helix/releases/). Then, follow the [official Helix guide](https://docs.helix-editor.com/install.html#pre-built-binaries) for setup steps.
 
-All shortcuts/keymaps can be found [in the documentation on the website](https://docs.helix-editor.com/keymap.html).
+## Features
 
-[Troubleshooting](https://github.com/helix-editor/helix/wiki/Troubleshooting)
+### Switching between Vim mode and Helix
 
-# Features
+Vim mode is enabled by default. Use `:vim-disable` and `:vim-enable` to disable and enable Vim emulation.
 
-- Vim-like modal editing
-- Multiple selections
-- Built-in language server support
-- Smart, incremental syntax highlighting and code editing via tree-sitter
+### Vim Supported Keybindings (Partial List)
 
-Although it's primarily a terminal-based editor, I am interested in exploring
-a custom renderer (similar to Emacs) using wgpu.
+#### Visual Mode, Visual Lines, and Visual Block
 
-Note: Only certain languages have indentation definitions at the moment. Check
-`runtime/queries/<lang>/` for `indents.scm`.
+- Visual mode and Visual lines: `v`, `V`
+- `va)`, `vi<textobject>` (`<textobject>`: `w`, `W`, `p`...etc)
+- Treesitter-related selection such as `vaf` to select a function.
+- `gv`
+- Visual Block: `C-v` works similarly to Vim’s _visual block_ mode, but it’s not exactly the same — It simply creates multiple cursors.
 
-# Installation
+#### Operators/Modifiers
 
-[Installation documentation](https://docs.helix-editor.com/install.html).
+- `d`, `dd`, `c`, `cc`, `y`, `yy`
+- `[c|y|d]<motion>` like `dw`, `dB`
+- `[c|y|d]{textobject}` like `diw`, `da)`, `yi}`
+- Treesitter-related modification keybindings such as `daf` to delete a function or `yaf` to yank a function.
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/helix-editor.svg?exclude_unsupported=1)](https://repology.org/project/helix-editor/versions)
+#### Navigation
 
-# Contributing
+- `*`, `#`, `n`, `N`
+- `0`, `^`, `$`
+- `f<char>`, `F<char>`, `t<char>`, `T<char>`
+- `{`, `}`
+- `w`, `W`, `b`, `B`, `e`, `E`
+- `gg`, `G`
+- `C-^`, `C-6`
 
-Contributing guidelines can be found [here](./docs/CONTRIBUTING.md).
+### How to Find and Replace?
 
-# Getting help
+If you have `sed` on your System, you can use `:s/../../flags` like Vim or `:s|..|..|flags`. You don't need to add `%`, it will default to `:%s` in normal mode and will be applied to the selection in `visual` mode.
 
-Your question might already be answered on the [FAQ](https://github.com/helix-editor/helix/wiki/FAQ).
+However, we advice using Helix multicursor to achive this:
 
-Discuss the project on the community [Matrix Space](https://matrix.to/#/#helix-community:matrix.org) (make sure to join `#helix-editor:matrix.org` if you're on a client that doesn't support Matrix Spaces yet).
+1. **Select target text**
+   - For the whole file: `ggVG`
+   - You can also remap `select_all`/`vim_select_all` to directly select all text.
 
-# Credits
+2. **Create multicursors**:
+   - Press `s`, then type your regex (e.g., `foo`) and hit `<Enter>`. This will put a cursor on all `foo` in the buffer.
 
-Thanks to [@jakenvac](https://github.com/jakenvac) for designing the logo!
+3. **Replace using multi-cursor**:
+   - Use Vim-style editing. For example, press `c` to change selection, then type your replacement text.
+
+4. **Exit multi-cursor mode**:
+   - Press `,` (comma)
+
+### File Explorer/Picker (this is a Helix feature)
+
+- `<Space>e` Open file explorer in workspace root
+- `<Space>E` Open file explorer at current buffer's directory
+- `<Space>f` Open file picker
+- `<Space>F` Open file picker at current working directory
+
+### Things to Watch For
+
+- Helix follows **selection → action** model. This patch simply removes the `selection` part for almost all commands in Normal mode. However, if you need the original Helix behavior of any command, you can wrap it with `vim_cmd_off` and `vim_cmd_on` in your config file:
+
+```toml
+[keys.normal]
+"A-up" = ["vim_cmd_off", "expand_selection", "vim_cmd_on"]
+```
+
+- Helix's `select_all` (`%`) is mapped to `match_brackets`, similar to Vim. `select_all` creates a selection in Normal mode. If you need the command in Vim mode, apply the previous trick or map it to `vim_select_all`.
+
+- `s` is used by Helix for `select_regex` and it's an important command for multi-cursor support. Either use `c` instead of `s` or remap keys.
+- `C` is used by Helix for `copy_selection_on_next_line` and it's an important command for multi-cursor support. To get Vim behaviour, map it to `vim_change_till_line_end`.
+- To get Helix's `escape` behavior instead of Vim's, you can remap it to the `vim_normal_mode` command:
+
+```toml
+[keys.insert]
+"esc" = "vim_normal_mode"
+```
+
+These differences might be reduced in the future.
+
+## Vim Emulations in Helix
+
+- [vim.hx](https://github.com/mattwparas/vim.hx) — Uses Helix's upcoming plugin system.
+- [evil-helix](https://github.com/usagi-flow/evil-helix) — A soft fork of Helix. This project adapts some ideas from evil-helix.
+- [helix-vim](https://github.com/LGUG2Z/helix-vim) — Configuration-only changes that bring Helix closer to Vim.
