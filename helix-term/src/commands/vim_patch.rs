@@ -1425,6 +1425,12 @@ impl VimOpCtx {
             };
 
             cx.editor.apply_motion(motion);
+
+            if let Some(opcx) = opcx {
+                opcx.run_operator_for_current_selection(cx);
+            } else if cx.editor.mode == Mode::Normal {
+                collapse_selection(cx)
+            }
         })
     }
 
